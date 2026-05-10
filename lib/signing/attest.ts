@@ -1,7 +1,29 @@
 import { ethers } from 'ethers';
-import { getSigner } from '@/lib/0g/client';
+import { createSigner, getRpcUrls, getSigner } from '@/lib/0g/client';
 import { prisma } from '@/lib/db';
 import { ATTESTATION_ABI, getContractAddress } from './contract';
+
+async function tryAttestOnRpc(
+  rpcUrl: string,
+  memoryId: string,
+  contentHash: string
+): Promise<string> {
+  const signer = createSigner(rpcUrl);
+  const contract = new ethers.Contract(getContractAddress(), ATTESTATION_ABI, signer);
+  const tx = await contract.attest(memoryId, contentHash);
+  const receipt = await tx.wait(1);
+  return receipt.hash;
+}
+
+async function tryVerifyOnRpc(
+  rpcUrl: string,
+  memoryId: string,
+  contentHash: string
+): Promise<boolean> {
+  const signer = createSigner(rpcUrl);
+  const contract = new ethers.Contract(getContractAddress(), ATTESTATION_ABI, signer);
+  return contract.verify(memoryId, contentHash);
+}
 
 export async function attestMemory(memoryId: string): Promise<{
   signature: string;
@@ -26,17 +48,15 @@ export async function attestMemory(memoryId: string): Promise<{
   const signature = await signer.signMessage(payload);
 
   let txHash: string | null = null;
-  try {
-    const contract = new ethers.Contract(
-      getContractAddress(),
-      ATTESTATION_ABI,
-      signer
-    );
-    const tx = await contract.attest(memoryId, contentHash);
-    const receipt = await tx.wait(1);
-    txHash = receipt.hash;
-  } catch (txErr) {
-    console.warn('[attestMemory] Contract call failed, storing signature only:', txErr);
+  const rpcUrls = getRpcUrls();
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      txHash = await tryAttestOnRpc(rpcUrl, memoryId, contentHash);
+      break;
+    } catch (txErr) {
+      console.warn(`[attestMemory] Contract call failed on ${rpcUrl}:`, txErr);
+    }
   }
 
   await prisma.memory.update({
@@ -74,15 +94,13 @@ export async function verifyMemory(memoryId: string): Promise<{
   const expectedAddress = await signer.getAddress();
 
   let onChainVerified = false;
-  try {
-    const contract = new ethers.Contract(
-      getContractAddress(),
-      ATTESTATION_ABI,
-      signer
-    );
-    onChainVerified = await contract.verify(memoryId, contentHash);
-  } catch {
-    onChainVerified = false;
+  for (const rpcUrl of getRpcUrls()) {
+    try {
+      onChainVerified = await tryVerifyOnRpc(rpcUrl, memoryId, contentHash);
+      if (onChainVerified) break;
+    } catch (err) {
+      console.warn(`[verifyMemory] Verify call failed on ${rpcUrl}:`, err);
+    }
   }
 
   return {
