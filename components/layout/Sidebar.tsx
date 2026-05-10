@@ -17,7 +17,7 @@ export function Sidebar() {
         <Image src="/logo.svg" alt="MNEME logo" width={28} height={28} />
         <div>
           <span className="text-base font-semibold tracking-tight text-zinc-900">
-            MNEME <span className="font-normal text-zinc-400">[agent memory]</span>
+            MNEME
           </span>
         </div>
       </div>
