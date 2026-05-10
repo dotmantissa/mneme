@@ -1,0 +1,49 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+model Agent {
+  id        String   @id @default(cuid())
+  name      String
+  apiKey    String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  memories  Memory[]
+}
+
+model Memory {
+  id          String     @id @default(cuid())
+  agentId     String
+  type        MemoryType
+  content     String
+  summary     String
+  embedding   Unsupported("vector(1536)")?
+  parentId    String?
+  storageHash String?
+  txHash      String?
+  signature   String?
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  agent    Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  parent   Memory?  @relation("MemoryChain", fields: [parentId], references: [id])
+  children Memory[] @relation("MemoryChain")
+
+  @@index([agentId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+enum MemoryType {
+  episodic
+  semantic
+  procedural
+  outcome
+}
