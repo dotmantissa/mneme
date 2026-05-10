@@ -9,8 +9,9 @@ const geistSans = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'MNEME — Agent Memory',
+  title: 'MNEME [agent memory]',
   description: 'Persistent episodic memory layer for AI agents',
+  icons: { icon: '/logo.svg' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
