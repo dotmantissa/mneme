@@ -5,6 +5,7 @@ const required = [
   'ZG_PRIVATE_KEY',
   'ZG_RPC_URL',
   'ZG_INDEXER_URL',
+  'ATTESTATION_CONTRACT_ADDRESS',
 ];
 
 export function validateEnv() {

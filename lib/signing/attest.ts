@@ -1,12 +1,8 @@
 import { ethers } from 'ethers';
 import { getSigner } from '@/lib/0g/client';
 import { prisma } from '@/lib/db';
+import { ATTESTATION_ABI, getContractAddress } from './contract';
 
-/**
- * Signs a memory's content hash using the 0G wallet.
- * Stores the signature and submits an on-chain attestation transaction.
- * Returns the signature and txHash.
- */
 export async function attestMemory(memoryId: string): Promise<{
   signature: string;
   txHash: string | null;
@@ -19,26 +15,28 @@ export async function attestMemory(memoryId: string): Promise<{
 
   const signer = getSigner();
 
+  const contentHash = ethers.keccak256(ethers.toUtf8Bytes(memory.content));
+
   const payload = JSON.stringify({
     id: memory.id,
     agentId: memory.agentId,
-    contentHash: ethers.keccak256(ethers.toUtf8Bytes(memory.content)),
+    contentHash,
     createdAt: memory.createdAt.toISOString(),
   });
-
   const signature = await signer.signMessage(payload);
 
   let txHash: string | null = null;
   try {
-    const tx = await signer.sendTransaction({
-      to: await signer.getAddress(),
-      value: BigInt(0),
-      data: ethers.hexlify(ethers.toUtf8Bytes(`mneme:attest:${memoryId}`)),
-    });
-    await tx.wait(1);
-    txHash = tx.hash;
+    const contract = new ethers.Contract(
+      getContractAddress(),
+      ATTESTATION_ABI,
+      signer
+    );
+    const tx = await contract.attest(memoryId, contentHash);
+    const receipt = await tx.wait(1);
+    txHash = receipt.hash;
   } catch (txErr) {
-    console.warn('[attestMemory] On-chain tx failed, storing signature only:', txErr);
+    console.warn('[attestMemory] Contract call failed, storing signature only:', txErr);
   }
 
   await prisma.memory.update({
@@ -49,14 +47,11 @@ export async function attestMemory(memoryId: string): Promise<{
   return { signature, txHash };
 }
 
-/**
- * Verifies a stored signature against the memory's content.
- * Returns the recovered signer address.
- */
 export async function verifyMemory(memoryId: string): Promise<{
   valid: boolean;
   recoveredAddress: string;
   expectedAddress: string;
+  onChainVerified: boolean;
 }> {
   const memory = await prisma.memory.findUnique({
     where: { id: memoryId },
@@ -65,20 +60,35 @@ export async function verifyMemory(memoryId: string): Promise<{
   if (!memory) throw new Error(`Memory not found: ${memoryId}`);
   if (!memory.signature) throw new Error('Memory has no signature');
 
+  const contentHash = ethers.keccak256(ethers.toUtf8Bytes(memory.content));
+
   const payload = JSON.stringify({
     id: memory.id,
     agentId: memory.agentId,
-    contentHash: ethers.keccak256(ethers.toUtf8Bytes(memory.content)),
+    contentHash,
     createdAt: memory.createdAt.toISOString(),
   });
 
-  const recoveredAddress = ethers.verifyMessage(payload, memory.signature);
   const signer = getSigner();
+  const recoveredAddress = ethers.verifyMessage(payload, memory.signature);
   const expectedAddress = await signer.getAddress();
+
+  let onChainVerified = false;
+  try {
+    const contract = new ethers.Contract(
+      getContractAddress(),
+      ATTESTATION_ABI,
+      signer
+    );
+    onChainVerified = await contract.verify(memoryId, contentHash);
+  } catch {
+    onChainVerified = false;
+  }
 
   return {
     valid: recoveredAddress.toLowerCase() === expectedAddress.toLowerCase(),
     recoveredAddress,
     expectedAddress,
+    onChainVerified,
   };
 }
