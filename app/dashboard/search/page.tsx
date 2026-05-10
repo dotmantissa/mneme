@@ -45,7 +45,7 @@ export default function SearchPage() {
         <select
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
-          className="border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:border-zinc-400"
+          className="border border-zinc-200 rounded-md px-3 py-2 text-sm text-zinc-900 bg-white outline-none focus:border-zinc-400"
         >
           <option value="">Select agent</option>
           {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -56,7 +56,7 @@ export default function SearchPage() {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && search()}
           placeholder="Search memories…"
-          className="flex-1 max-w-sm border border-zinc-200 rounded-md px-3 py-2 text-sm outline-none focus:border-zinc-400"
+          className="flex-1 max-w-sm border border-zinc-200 rounded-md px-3 py-2 text-sm text-zinc-900 bg-white placeholder:text-zinc-400 outline-none focus:border-zinc-400"
         />
         <button
           onClick={search}

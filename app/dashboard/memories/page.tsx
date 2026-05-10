@@ -72,7 +72,7 @@ const [chain, setChain] = useState<ChainResponse | null>(null);
       <select
         value={selectedAgent}
         onChange={(e) => setSelectedAgent(e.target.value)}
-        className="border border-zinc-200 rounded-md px-3 py-2 text-sm mb-6 outline-none focus:border-zinc-400"
+        className="border border-zinc-200 rounded-md px-3 py-2 text-sm text-zinc-900 bg-white outline-none focus:border-zinc-400"
       >
         <option value="">Select an agent</option>
         {agents.map(a => (
