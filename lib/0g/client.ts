@@ -39,13 +39,20 @@ export function getIndexer(): Indexer {
 
 export function getRpcUrls(): string[] {
   const configured = process.env.ZG_RPC_URL?.trim();
-  const fallbacks = [
+  const envFallbacks = (process.env.ZG_RPC_FALLBACK_URLS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const defaultFallbacks = [
     'https://evmrpc-testnet.0g.ai',
     'https://0g-galileo-testnet.drpc.org',
   ];
 
-  const urls = configured ? [configured, ...fallbacks] : fallbacks;
-  return Array.from(new Set(urls.filter(Boolean)));
+  const urls = configured
+    ? [configured, ...envFallbacks, ...defaultFallbacks]
+    : [...envFallbacks, ...defaultFallbacks];
+
+  return Array.from(new Set(urls));
 }
 
 export function createProvider(rpcUrl: string): ethers.JsonRpcProvider {
