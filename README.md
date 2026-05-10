@@ -1,36 +1,282 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MNEME
 
-## Getting Started
+Persistent episodic memory layer for AI agents.
 
-First, run the development server:
+MNEME provides:
+- Per-agent memory stores
+- Semantic retrieval (vector search)
+- Optional 0G storage blob anchoring
+- Signature + on-chain attestation support
+- Dashboard UI for agents, memory browsing, chain inspection, and search
+- SDK for external agent/runtime integration
+
+## What You Can Do
+
+With MNEME, you can:
+1. Create an agent identity
+2. Write memories (`episodic`, `semantic`, `procedural`, `outcome`)
+3. Retrieve memories by semantic similarity
+4. Inspect parent-child causal chains
+5. Attest memories cryptographically and verify on-chain state
+
+## Stack
+
+- Next.js 14 (App Router)
+- TypeScript
+- Prisma + PostgreSQL (Neon)
+- pgvector (`vector(1536)`)
+- OpenAI embeddings (`text-embedding-3-small`)
+- 0G RPC + Indexer integration
+- Ethers v6
+
+## Project Structure (Usage-Relevant)
+
+- `app/dashboard` - UI (Agents, Memories, Search)
+- `app/api/agents` - agent creation/list
+- `app/api/memories` - memory write/list
+- `app/api/memories/[id]/chain` - causal chain tree
+- `app/api/search` - semantic search
+- `app/api/memories/[id]/attest` - signature + contract attestation APIs
+- `lib/sdk` - `MnemeClient` SDK for external apps/agents
+- `lib/signing` - attestation logic + contract ABI helper
+- `contracts` - `MnemeAttestation.sol` and Hardhat deployment scripts
+
+## Environment Variables
+
+Root app (`.env.local`):
+
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `OPENAI_API_KEY`
+- `ZG_PRIVATE_KEY`
+- `ZG_RPC_URL`
+- `ZG_RPC_FALLBACK_URLS` (optional, comma-separated)
+- `ZG_INDEXER_URL`
+- `ATTESTATION_CONTRACT_ADDRESS`
+- `NEXT_PUBLIC_APP_URL`
+
+Example fallback value:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+ZG_RPC_FALLBACK_URLS=https://evmrpc-testnet.0g.ai,https://0g-galileo-testnet.drpc.org
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local Run
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open:
+- `http://localhost:3000/dashboard`
 
-## Learn More
+## Dashboard Usage
 
-To learn more about Next.js, take a look at the following resources:
+### 1) Agents
+Route: `/dashboard`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Create an agent name
+- Copy/store the generated `apiKey` per agent
+- `apiKey` is required for protected write/search/attest API calls
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2) Memories
+Route: `/dashboard/memories`
 
-## Deploy on Vercel
+- Select an agent
+- Browse most recent memories
+- Click a memory to view:
+  - summary/content
+  - storage hash (if upload succeeded)
+  - causal chain tree (ancestor + descendants)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3) Search
+Route: `/dashboard/search`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Select agent
+- Enter free-text query
+- Review scored semantic matches
+
+## API Usage
+
+## Response shape
+
+Success:
+
+```json
+{ "success": true, "data": { } }
+```
+
+Error:
+
+```json
+{ "success": false, "error": "..." }
+```
+
+### Create Agent
+
+```bash
+curl -X POST http://localhost:3000/api/agents \
+  -H "Content-Type: application/json" \
+  -d '{"name":"prod-agent"}'
+```
+
+### List Agents
+
+```bash
+curl http://localhost:3000/api/agents
+```
+
+### Create Memory (protected)
+
+Requires `X-Agent-Key`.
+
+```bash
+curl -X POST http://localhost:3000/api/memories \
+  -H "Content-Type: application/json" \
+  -H "X-Agent-Key: <AGENT_API_KEY>" \
+  -d '{
+    "agentId":"<AGENT_ID>",
+    "type":"episodic",
+    "content":"Agent executed a swap.",
+    "summary":"Executed swap"
+  }'
+```
+
+### List Memories (UI path, unprotected)
+
+```bash
+curl "http://localhost:3000/api/memories?agentId=<AGENT_ID>&limit=20"
+```
+
+### Semantic Search (protected)
+
+```bash
+curl "http://localhost:3000/api/search?agentId=<AGENT_ID>&q=uniswap+swap&limit=5" \
+  -H "X-Agent-Key: <AGENT_API_KEY>"
+```
+
+### Get Causal Chain
+
+```bash
+curl "http://localhost:3000/api/memories/<MEMORY_ID>/chain"
+```
+
+### Attest Memory (protected)
+
+```bash
+curl -X POST "http://localhost:3000/api/memories/<MEMORY_ID>/attest" \
+  -H "X-Agent-Key: <AGENT_API_KEY>"
+```
+
+### Verify Memory (protected)
+
+```bash
+curl "http://localhost:3000/api/memories/<MEMORY_ID>/attest" \
+  -H "X-Agent-Key: <AGENT_API_KEY>"
+```
+
+Expected verify fields:
+- `valid` (signature check)
+- `onChainVerified` (contract state check)
+- `recoveredAddress`
+- `expectedAddress`
+
+### Health Check
+
+```bash
+curl http://localhost:3000/api/health
+```
+
+## MnemeClient SDK Usage
+
+```ts
+import { MnemeClient } from '@/lib/sdk';
+
+const client = new MnemeClient({
+  baseUrl: 'http://localhost:3000',
+  agentId: '<AGENT_ID>',
+  apiKey: '<AGENT_API_KEY>',
+});
+
+const memory = await client.remember({
+  type: 'episodic',
+  content: 'Agent bought ETH based on RSI crossover.',
+  summary: 'Bought ETH from RSI signal',
+});
+
+const results = await client.recall('ETH RSI');
+const chain = await client.getChain(memory.id);
+const verification = await client.verify(memory.id);
+```
+
+## Attestation Contract
+
+Contract source:
+- `contracts/contracts/MnemeAttestation.sol`
+
+Deploy script:
+- `contracts/scripts/deploy.ts`
+
+Deploy (from `contracts/`):
+
+```bash
+npx hardhat compile
+npx hardhat run scripts/deploy.ts --network zgTestnet
+```
+
+Set deployed address in root `.env.local`:
+
+```bash
+ATTESTATION_CONTRACT_ADDRESS=0x...
+```
+
+## Vercel Deployment
+
+`vercel.json` uses:
+
+```json
+{
+  "framework": "nextjs",
+  "buildCommand": "prisma generate && prisma migrate deploy && next build",
+  "installCommand": "npm install"
+}
+```
+
+Deploy:
+
+```bash
+npx vercel --prod
+```
+
+Ensure production env vars include everything from `.env.example`.
+
+## Troubleshooting
+
+### `401 Missing X-Agent-Key header`
+- Add `X-Agent-Key` for protected routes:
+  - `POST /api/memories`
+  - `GET /api/search`
+  - `POST/GET /api/memories/:id/attest`
+
+### `onChainVerified: false` with `valid: true`
+- Signature is fine; on-chain read/write failed.
+- Check:
+  - `ATTESTATION_CONTRACT_ADDRESS`
+  - `ZG_PRIVATE_KEY` funded on target network
+  - RPC endpoint reachability
+  - `ZG_RPC_FALLBACK_URLS` includes healthy endpoints
+
+### Memory write succeeds but `txHash` is null
+- Attestation or contract call failed at runtime; memory still stored with signature-only fallback.
+
+## Security Notes
+
+- Never commit real secrets.
+- Keep `ZG_PRIVATE_KEY` server-side only.
+- Rotate compromised API keys by creating a new agent key identity and retiring old usage.
+
+## Current Production
+
+- Alias: `https://mneme-ten.vercel.app`
+
